@@ -1,19 +1,17 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'user_model.dart';
 import 'api_service.dart';
-
-void main() {
-  runApp(MaterialApp(home: UserScreen()));
-}
 
 class UserScreen extends StatefulWidget {
   const UserScreen({super.key});
 
   @override
-  _UserScreenState createState() => _UserScreenState();
+  UserScreenState createState() => UserScreenState();
 }
 
-class _UserScreenState extends State<UserScreen> {
+class UserScreenState extends State<UserScreen> {
   late Future<List<User>> futureUsers;
   final TextEditingController nameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
@@ -35,16 +33,34 @@ class _UserScreenState extends State<UserScreen> {
     String name = nameController.text;
     String email = emailController.text;
 
+    if (name.isEmpty || email.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Name and email cannot be empty")));
+      return;
+    }
+
     if (editingId == null) {
-      await ApiService.addUser(name, email);
+      await ApiService.addUser(name, email); // Add new user
     } else {
-      await ApiService.updateUser(editingId!, name, email);
+      bool success = await ApiService.updateUser(
+        editingId!,
+        name,
+        email,
+      ); // Update user
+      if (!success) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Failed to update user")));
+        return;
+      }
     }
 
     nameController.clear();
     emailController.clear();
     editingId = null;
     refreshUsers();
+    Navigator.pop(context); // Close the dialog after saving
   }
 
   void handleEdit(User user) {
@@ -53,6 +69,7 @@ class _UserScreenState extends State<UserScreen> {
       emailController.text = user.email;
       editingId = user.id;
     });
+    showUserDialog();
   }
 
   void handleDelete(int id) async {
@@ -60,68 +77,101 @@ class _UserScreenState extends State<UserScreen> {
     refreshUsers();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("Flutter Crud with Express and MySQL")),
-      body: Column(
-        children: [
-          Padding(
-            padding: EdgeInsets.all(8.0),
-            child: Column(
+  void showUserDialog() {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: Text(editingId == null ? "Add User" : "Edit User"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
                   controller: nameController,
-                  decoration: InputDecoration(labelText: "Name"),
-                ),
-                TextField(
-                  controller: emailController,
-                  decoration: InputDecoration(labelText: "Email"),
+                  decoration: InputDecoration(
+                    labelText: "Name",
+                    border: OutlineInputBorder(),
+                  ),
                 ),
                 SizedBox(height: 10),
-                ElevatedButton(
-                  onPressed: handleSave,
-                  child: Text(editingId == null ? "Add User" : "Update User"),
+                TextField(
+                  controller: emailController,
+                  decoration: InputDecoration(
+                    labelText: "Email",
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ],
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: handleSave,
+                child: Text(editingId == null ? "Add" : "Update"),
+              ),
+            ],
           ),
-          Expanded(
-            child: FutureBuilder<List<User>>(
-              future: futureUsers,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(child: Text("No Users Found"));
-                }
-                return ListView(
-                  children:
-                      snapshot.data!.map((user) {
-                        return ListTile(
-                          title: Text(user.name),
-                          subtitle: Text(user.email),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: Icon(Icons.edit),
-                                onPressed: () => handleEdit(user),
-                              ),
-                              IconButton(
-                                icon: Icon(Icons.delete),
-                                onPressed: () => handleDelete(user.id),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                );
-              },
-            ),
-          ),
-        ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          "Flutter CRUD with Express",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.blueGrey,
+      ),
+      body: FutureBuilder<List<User>>(
+        future: futureUsers,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return Center(child: Text("No Users Found"));
+          }
+          return ListView.builder(
+            itemCount: snapshot.data!.length,
+            itemBuilder: (context, index) {
+              User user = snapshot.data![index];
+              return Card(
+                margin: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                elevation: 5,
+                child: ListTile(
+                  title: Text(
+                    user.name,
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(user.email),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.edit, color: Colors.blue),
+                        onPressed: () => handleEdit(user),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => handleDelete(user.id),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: showUserDialog,
+        backgroundColor: const Color.fromARGB(255, 43, 42, 42),
+        child: Icon(Icons.add, color: Colors.white),
       ),
     );
   }
